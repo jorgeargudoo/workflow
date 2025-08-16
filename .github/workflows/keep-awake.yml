@@ -1,0 +1,34 @@
+name: Keep Streamlit awake
+
+on:
+  schedule:
+    - cron: '*/7 * * * *'   
+  workflow_dispatch:         
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    env:
+      WARMUP_URL: "https://recomendadorturisticointeligente-ltledqrz5j9w5acwqdwask.streamlit.app//?warmup=1"  
+    steps:
+      - name: Jitter y ping
+        shell: bash
+        run: |
+          J=$(( RANDOM % 241 ))
+          echo "Esperando ${J}s antes del ping..."
+          sleep $J
+
+          if [ $(( RANDOM % 6 )) -eq 0 ]; then
+            echo "Esta ejecución se omite aleatoriamente."
+            exit 0
+          fi
+
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -m 10 -A "Mozilla/5.0 keepalive" "$WARMUP_URL" || true)
+          echo "HTTP status: $STATUS"
+
+          if [[ "$STATUS" != 2* ]]; then
+            echo "Reintentando en 20s..."
+            sleep 20
+            STATUS2=$(curl -s -o /dev/null -w "%{http_code}" -m 10 -A "Mozilla/5.0 keepalive" "$WARMUP_URL" || true)
+            echo "HTTP status (reintento): $STATUS2"
+          fi
