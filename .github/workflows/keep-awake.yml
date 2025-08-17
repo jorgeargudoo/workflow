@@ -2,33 +2,35 @@ name: Keep Streamlit awake
 
 on:
   schedule:
-    - cron: '*/15 * * * *'   
-  workflow_dispatch:         
+    - cron: '*/7 * * * *'   # cada 5 min (UTC)
+  workflow_dispatch:
 
 jobs:
   ping:
     runs-on: ubuntu-latest
     env:
-      WARMUP_URL: "https://recomendadorturisticointeligente-ltledqrz5j9w5acwqdwask.streamlit.app//?warmup=1"  
+      WARMUP_URL: "https://recomendadorturisticointeligente-ltledqrz5j9w5acwqdwask.streamlit.app/?warmup=1"
     steps:
-      - name: Jitter y ping
+      - name: Jitter corto y ping con follow-redirects
         shell: bash
         run: |
-          J=$(( RANDOM % 241 ))
+          # Espera aleatoria 0..90s para desincronizar sin crear huecos
+          J=$(( RANDOM % 91 ))
           echo "Esperando ${J}s antes del ping..."
           sleep $J
 
-          if [ $(( RANDOM % 6 )) -eq 0 ]; then
-            echo "Esta ejecución se omite aleatoriamente."
-            exit 0
-          fi
+          # HEAD rápido para “tocar” la app
+          STATUS_HEAD=$(curl -s -o /dev/null -w "%{http_code}" -m 10 -L -I -A "Mozilla/5.0 keepalive" "$WARMUP_URL" || true)
+          echo "HTTP status (HEAD): $STATUS_HEAD"
 
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -m 10 -A "Mozilla/5.0 keepalive" "$WARMUP_URL" || true)
-          echo "HTTP status: $STATUS"
+          # GET real para calentar (load_models y cachés)
+          STATUS_GET=$(curl -s -o /dev/null -w "%{http_code}" -m 15 -L -A "Mozilla/5.0 keepalive" "$WARMUP_URL" || true)
+          echo "HTTP status (GET): $STATUS_GET"
 
-          if [[ "$STATUS" != 2* ]]; then
+          # Reintento simple si no fue 2xx
+          if [[ "$STATUS_GET" != 2* ]]; then
             echo "Reintentando en 20s..."
             sleep 20
-            STATUS2=$(curl -s -o /dev/null -w "%{http_code}" -m 10 -A "Mozilla/5.0 keepalive" "$WARMUP_URL" || true)
-            echo "HTTP status (reintento): $STATUS2"
+            STATUS_GET2=$(curl -s -o /dev/null -w "%{http_code}" -m 15 -L -A "Mozilla/5.0 keepalive" "$WARMUP_URL" || true)
+            echo "HTTP status (GET reintento): $STATUS_GET2"
           fi
